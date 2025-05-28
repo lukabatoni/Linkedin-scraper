@@ -1,59 +1,95 @@
-import json
-import os
 from selenium.webdriver.common.by import By
 import time
-import logging
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 
-def scrape_profile(driver, profile_url):
+def scrape_profile(driver, url):
+    data = {
+        'name': '',
+        'headline': '',
+        'about': '',
+        'experience': [],
+        'education': '',
+        'company': '',
+        'location': '',
+        'connections': '',
+        'url': url,
+        'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
+    }
+
     try:
-        print(f"\nAttempting to scrape: {profile_url}")
-        driver.get(profile_url)
+        print(f"\nAttempting to scrape: {url}")
+        driver.get(url)
         time.sleep(5)
 
-        if 'authwall' in driver.current_url:
-            print("Hit LinkedIn authwall - not properly logged in")
-            return None
-
-        data = {
-            'name': '',
-            'headline': '',
-            'about': '',
-            'experience': [],
-            'education': [],
-            'url': profile_url,
-            'timestamp': time.strftime("%Y-%m-%d %H:%M:%S")
-        }
-
+        # Name
         try:
-            name_elem = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, '//h1'))
-            )
-            data['name'] = name_elem.text
-        except Exception as e:
-            print(f"Could not find name: {str(e)}")
+            data['name'] = driver.find_element(By.XPATH, '//h1[contains(@class,"text-heading-xlarge")]').text
+        except:
+            print("Could not find name.")
 
-        # Repeat similar for headline/about with correct XPATHs
+        # Headline
+        try:
+            data['headline'] = driver.find_element(By.XPATH, '//div[@class="body-small text-color-text"]/span').text
+        except:
+            print("Could not find headline.")
 
-        print(f"Successfully scraped data for {data['name']}")
+        # Education
+        try:
+            data['education'] = driver.find_element(By.XPATH, '//div[contains(@class, "body-small text-color-text-low-emphasis")]/span[1]').text
+        except:
+            print("Could not find education.")
+
+        # Company
+        try:
+            data['company'] = driver.find_element(By.XPATH, '//span[@class="member-current-company"]').text
+        except:
+            print("Could not find company.")
+
+        # Location
+        try:
+            data['location'] = driver.find_element(By.XPATH, '//div[contains(@class, "body-small text-color-text-low-emphasis")][2]').text.split('\n')[0]
+        except:
+            print("Could not find location.")
+
+        # Connections
+        try:
+            data['connections'] = driver.find_element(By.XPATH, '//span[contains(@class, "whitespace-nowrap")]').text
+        except:
+            print("Could not find connections.")
+
+        # Experience
+        try:
+            experience_section = driver.find_element(By.XPATH, '//section[contains(@id,"experience")]')
+            experience_items = experience_section.find_elements(By.XPATH, './/li[contains(@class,"artdeco-list__item")]')
+            
+            for item in experience_items:
+                try:
+                    title = item.find_element(By.XPATH, './/span[contains(@class, "mr1")]/span').text
+                except:
+                    title = ''
+                try:
+                    company = item.find_element(By.XPATH, './/span[contains(@class,"t-14 t-normal")]/span').text
+                except:
+                    company = ''
+                try:
+                    date_range = item.find_element(By.XPATH, './/span[contains(@class,"t-14 t-normal t-black--light")][1]/span').text
+                except:
+                    date_range = ''
+                try:
+                    location = item.find_element(By.XPATH, './/span[contains(@class,"t-14 t-normal t-black--light")][2]/span').text
+                except:
+                    location = ''
+
+                data['experience'].append({
+                    'title': title,
+                    'company': company,
+                    'date_range': date_range,
+                    'location': location
+                })
+        except:
+            print("Could not find experience section.")
+
         return data
-    except Exception as e:
-        print(f"Fatal error scraping profile: {str(e)}")
-        return None
 
-def save_data(data, filename='data/scraped_data.json'):
-    """Save scraped data to JSON file"""
-    try:
-        # Ensure data directory exists
-        os.makedirs(os.path.dirname(filename), exist_ok=True)
-        
-        # Save data in append mode
-        with open(filename, 'a', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False)
-            f.write('\n')  # New line for each record
-        logging.info(f"Successfully saved data for {data.get('name', 'unknown')}")
-        print(f"Data saved for {data.get('name', 'unknown')}")  # Console confirmation
     except Exception as e:
-        logging.error(f"Error saving data: {str(e)}")
-        print(f"Error saving data: {str(e)}")  # Console error
+        print(f"Failed to scrape {url}: {str(e)}")
+        return data
